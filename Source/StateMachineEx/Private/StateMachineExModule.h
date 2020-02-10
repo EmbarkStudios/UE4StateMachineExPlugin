@@ -1,8 +1,7 @@
 #pragma once
 
-#include "ModuleManager.h"
-
-
+#include "CoreMinimal.h"
+#include "Runtime/Core/Public/Modules/ModuleManager.h"
 
 class FStateMachineExModule : public IModuleInterface
 {
@@ -15,9 +14,4 @@ public:
 	virtual void ShutdownModule() override;
 };
 
-
-
-struct FStateMachineEx
-{
-	// Declare module static functions here
-};
+DECLARE_LOG_CATEGORY_EXTERN(LogStateMachineEx, Log, All);

@@ -1,8 +1,6 @@
-#include "StateMachineDeveloperExPrivatePCH.h"
-
-#include "Blueprint/K2Node_State.h"
-#include "Blueprint/CreateStateAsyncTask.h"
-#include "StateMachine/State.h"
+#include "K2Node_State.h"
+#include "CreateStateAsyncTask.h"
+#include "State.h"
 
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -17,8 +15,6 @@
 #include "Runtime/Launch/Resources/Version.h"
 
 #define LOCTEXT_NAMESPACE "FStateMachineDeveloperExModule"
-
-
 
 UK2Node_State::UK2Node_State(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -68,47 +64,26 @@ void UK2Node_State::AllocateDefaultPins()
 {
 	const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
 
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 	CreatePin(EGPD_Input, K2Schema->PC_Exec, FName(), nullptr, K2Schema->PN_Execute);
-#else
-	CreatePin(EGPD_Input, K2Schema->PC_Exec, FString(), nullptr, K2Schema->PN_Execute);
-#endif
 
 	bool bExposeProxy = false;
-	bool bHideThen = false;
 	for (const UStruct* TestStruct = ProxyClass; TestStruct; TestStruct = TestStruct->GetSuperStruct())
 	{
 		bExposeProxy |= TestStruct->HasMetaData(TEXT("ExposedAsyncProxy"));
-		bHideThen |= TestStruct->HasMetaData(TEXT("HideThen"));
 	}
 
-	if (!bHideThen)
-	{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
-		CreatePin(EGPD_Output, K2Schema->PC_Exec, FName(), nullptr, K2Schema->PN_Then);
-#else
-		CreatePin(EGPD_Output, K2Schema->PC_Exec, FString(), nullptr, K2Schema->PN_Then);
-#endif
-	}
-
+	// Optionally expose state class as pin
 	if (bExposeProxy)
 	{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 		CreatePin(EGPD_Output, K2Schema->PC_Object, FName(), ProxyClass, FBaseAsyncTaskHelper::GetAsyncTaskProxyName());
-#else
-		CreatePin(EGPD_Output, K2Schema->PC_Object, FString(), ProxyClass, FBaseAsyncTaskHelper::GetAsyncTaskProxyName());
-#endif
 	}
 
+	// Create output exec pins for each event as well as any data output pins necessary for each event type.
 	for (TFieldIterator<UProperty> PropertyIt(ProxyClass); PropertyIt; ++PropertyIt)
 	{
 		if (UMulticastDelegateProperty* Property = Cast<UMulticastDelegateProperty>(*PropertyIt))
 		{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 			CreatePin(EGPD_Output, K2Schema->PC_Exec, FName(), nullptr, *Property->GetName());
-#else
-			CreatePin(EGPD_Output, K2Schema->PC_Exec, FString(), nullptr, *Property->GetName());
-#endif
 			UFunction* DelegateSignatureFunction = Property->SignatureFunction;
 			if (IsValid(DelegateSignatureFunction))
 			{
@@ -118,11 +93,7 @@ void UK2Node_State::AllocateDefaultPins()
 					const bool bIsFunctionInput = !Param->HasAnyPropertyFlags(CPF_OutParm) || Param->HasAnyPropertyFlags(CPF_ReferenceParm);
 					if (bIsFunctionInput)
 					{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 						UEdGraphPin* Pin = CreatePin(EGPD_Output, FName(), FName(), nullptr, Param->GetFName());
-#else
-						UEdGraphPin* Pin = CreatePin(EGPD_Output, FString(), FString(), nullptr, Param->GetName());
-#endif
 						K2Schema->ConvertPropertyToPinType(Param, /*out*/ Pin->PinType);
 					}
 				}
@@ -130,41 +101,33 @@ void UK2Node_State::AllocateDefaultPins()
 		}
 	}
 
+	// Generate pins for the factory function. This is not visible to the user.
 	bool bAllPinsGood = true;
-	UFunction* Function = ProxyFactoryClass ? ProxyFactoryClass->FindFunctionByName(ProxyFactoryFunctionName) : nullptr;
-	if (Function)
+	UFunction* ObjectConstructionFunction = ProxyFactoryClass ? ProxyFactoryClass->FindFunctionByName(ProxyFactoryFunctionName) : nullptr;
+	if (ObjectConstructionFunction)
 	{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 		TSet<FName> PinsToHide;
-		FBlueprintEditorUtils::GetHiddenPinsForFunction(GetGraph(), Function, PinsToHide);
-#else
-		TSet<FString> PinsToHide;
-		FBlueprintEditorUtils::GetHiddenPinsForFunction(GetGraph(), Function, PinsToHide);
-#endif
-		for (TFieldIterator<UProperty> PropIt(Function); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
+		FBlueprintEditorUtils::GetHiddenPinsForFunction(GetGraph(), ObjectConstructionFunction, PinsToHide);
+		for (TFieldIterator<UProperty> PropIt(ObjectConstructionFunction); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
 		{
 			UProperty* Param = *PropIt;
 			const bool bIsFunctionInput = !Param->HasAnyPropertyFlags(CPF_OutParm) || Param->HasAnyPropertyFlags(CPF_ReferenceParm);
 			if (!bIsFunctionInput)
 			{
-				// skip function output, it's internal node data
+				// Skip function output, it's internal node data
 				continue;
 			}
 
 			const bool bIsRefParam = Param->HasAnyPropertyFlags(CPF_ReferenceParm) && bIsFunctionInput;
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 			FCreatePinParams PinParams;
 			PinParams.bIsReference = bIsRefParam;
 			UEdGraphPin* Pin = CreatePin(EGPD_Input, FName(), FName(), nullptr, Param->GetFName(), PinParams);
-#else
-			UEdGraphPin* Pin = CreatePin(EGPD_Input, FString(), FString(), nullptr, Param->GetName(), EPinContainerType::None, bIsRefParam);
-#endif
-			const bool bPinGood = (Pin != NULL) && K2Schema->ConvertPropertyToPinType(Param, /*out*/ Pin->PinType);
+			const bool bPinGood = (Pin != nullptr) && K2Schema->ConvertPropertyToPinType(Param, /*out*/ Pin->PinType);
 
 			if (bPinGood)
 			{
-				//Flag pin as read only for const reference property
-				Pin->bDefaultValueIsIgnored = Param->HasAllPropertyFlags(CPF_ConstParm | CPF_ReferenceParm) && (!Function->HasMetaData(FBlueprintMetadata::MD_AutoCreateRefTerm) || Pin->PinType.IsContainer());
+				// Flag pin as read only for const reference property
+				Pin->bDefaultValueIsIgnored = Param->HasAllPropertyFlags(CPF_ConstParm | CPF_ReferenceParm) && (!ObjectConstructionFunction->HasMetaData(FBlueprintMetadata::MD_AutoCreateRefTerm) || Pin->PinType.IsContainer());
 
 				const bool bAdvancedPin = Param->HasAllPropertyFlags(CPF_AdvancedDisplay);
 				Pin->bAdvancedView = bAdvancedPin;
@@ -174,7 +137,7 @@ void UK2Node_State::AllocateDefaultPins()
 				}
 
 				FString ParamValue;
-				if (K2Schema->FindFunctionParameterDefaultValue(Function, Param, ParamValue))
+				if (K2Schema->FindFunctionParameterDefaultValue(ObjectConstructionFunction, Param, ParamValue))
 				{
 					K2Schema->SetPinAutogeneratedDefaultValue(Pin, ParamValue);
 				}
@@ -201,6 +164,7 @@ void UK2Node_State::AllocateDefaultPins()
 	StateClassPin->bHidden = true;
 	StateClassPin->DefaultObject = StateClass;
 
+	// Create input pins for state properties. These should be read and set on state enter.
 	for (TFieldIterator<UProperty> PropertyIt(StateClass, EFieldIteratorFlags::IncludeSuper); PropertyIt; ++PropertyIt)
 	{
 		UProperty* Property = *PropertyIt;
@@ -215,11 +179,7 @@ void UK2Node_State::AllocateDefaultPins()
 			Property->HasAllPropertyFlags(CPF_BlueprintVisible) &&
 			!bIsDelegate)
 		{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 			UEdGraphPin* Pin = CreatePin(EGPD_Input, FName(), FName(), nullptr, Property->GetFName());
-#else
-			UEdGraphPin* Pin = CreatePin(EGPD_Input, FString(), FString(), nullptr, Property->GetName());
-#endif
 			const bool bPinGood = (Pin != nullptr) && K2Schema->ConvertPropertyToPinType(Property, /*out*/ Pin->PinType);
 
 			// Copy tooltip from the property.
@@ -233,11 +193,12 @@ void UK2Node_State::AllocateDefaultPins()
 
 void UK2Node_State::ExpandNode(FKismetCompilerContext& CompilerContext, UEdGraph* SourceGraph)
 {
-	static FString ObjectParamName = FString(TEXT("Object"));
-	static FString ValueParamName = FString(TEXT("Value"));
-	static FString PropertyNameParamName = FString(TEXT("PropertyName"));
+	// Call our grandparent. We cannot call super directly here since we need to patch the super function.
+	Super::Super::ExpandNode(CompilerContext, SourceGraph);
 
-	UK2Node::ExpandNode(CompilerContext, SourceGraph);
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// WARNING: THIS CODE HAS BEEN COPIED FROM THE BASE CLASS, ONLY SLIGHT MODIFICATIONS IN THE MIDDLE PRESENT
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	const UEdGraphSchema_K2* Schema = CompilerContext.GetSchema();
 	check(SourceGraph && Schema);
@@ -249,38 +210,37 @@ void UK2Node_State::ExpandNode(FKismetCompilerContext& CompilerContext, UEdGraph
 	CallCreateProxyObjectNode->AllocateDefaultPins();
 	if (CallCreateProxyObjectNode->GetTargetFunction() == nullptr)
 	{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 20
 		const FText ClassName = ProxyFactoryClass ? FText::FromString(ProxyFactoryClass->GetName()) : LOCTEXT("MissingClassString", "Unknown Class");
 		const FString FormattedMessage = FText::Format(
-			LOCTEXT("AsyncTaskErrorFmt", "State: Missing function {0} from class {1} for async task @@"),
+			LOCTEXT("AsyncTaskErrorFmt", "BaseAsyncTask: Missing function {0} from class {1} for async task @@"),
 			FText::FromString(ProxyFactoryFunctionName.GetPlainNameString()),
 			ClassName
 		).ToString();
-#else
-		const FString ClassName = ProxyFactoryClass ? ProxyFactoryClass->GetName() : LOCTEXT("MissingClassString", "Unknown Class").ToString();
-		const FString RawMessage = LOCTEXT("AsyncTaskError", "State: Missing function %s from class %s for async task @@").ToString();
-		const FString FormattedMessage = FString::Printf(*RawMessage, *ProxyFactoryFunctionName.GetPlainNameString(), *ClassName);
-#endif
 
 		CompilerContext.MessageLog.Error(*FormattedMessage, this);
 		return;
 	}
 
-	bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPinChecked(Schema->PN_Execute), *CallCreateProxyObjectNode->FindPinChecked(Schema->PN_Execute)).CanSafeConnect();
+	bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPinChecked(UEdGraphSchema_K2::PN_Execute), *CallCreateProxyObjectNode->FindPinChecked(UEdGraphSchema_K2::PN_Execute)).CanSafeConnect();
 
-	for (auto CurrentPin : Pins)
+	for (UEdGraphPin* CurrentPin : Pins)
 	{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 		if (FBaseAsyncTaskHelper::ValidDataPin(CurrentPin, EGPD_Input))
-#else
-		if (FBaseAsyncTaskHelper::ValidDataPin(CurrentPin, EGPD_Input, Schema))
-#endif
 		{
 			UEdGraphPin* DestPin = CallCreateProxyObjectNode->FindPin(CurrentPin->PinName); // match function inputs, to pass data to function from CallFunction node
-			if (DestPin != nullptr)
+			
+#pragma region OUR_CODE
+			// When defining our own variables on states we cannot wire them into this function since this simply stamps out a state object using our factory function. Since we cannot very well put all arguments into the factory function, we have to set them by name later.
+
+			// Original line below:
+			//bIsErrorFree &= DestPin && CompilerContext.MovePinLinksToIntermediate(*CurrentPin, *DestPin).CanSafeConnect();
+
+			if(DestPin)
 			{
+				// Dest pin is expected to be null for any state arguments we have.
 				bIsErrorFree &= DestPin && CompilerContext.MovePinLinksToIntermediate(*CurrentPin, *DestPin).CanSafeConnect();
 			}
+#pragma endregion //OUR_CODE
 		}
 	}
 
@@ -291,24 +251,35 @@ void UK2Node_State::ExpandNode(FKismetCompilerContext& CompilerContext, UEdGraph
 
 	// GATHER OUTPUT PARAMETERS AND PAIR THEM WITH LOCAL VARIABLES
 	TArray<FBaseAsyncTaskHelper::FOutputPinAndLocalVariable> VariableOutputs;
-	for (auto CurrentPin : Pins)
+	bool bPassedFactoryOutputs = false;
+	for (UEdGraphPin* CurrentPin : Pins)
 	{
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
 		if ((OutputAsyncTaskProxy != CurrentPin) && FBaseAsyncTaskHelper::ValidDataPin(CurrentPin, EGPD_Output))
-#else
-		if ((OutputAsyncTaskProxy != CurrentPin) && FBaseAsyncTaskHelper::ValidDataPin(CurrentPin, EGPD_Output, Schema))
-#endif
 		{
-			const FEdGraphPinType& PinType = CurrentPin->PinType;
-			UK2Node_TemporaryVariable* TempVarOutput = CompilerContext.SpawnInternalVariable(
-				this, PinType.PinCategory, PinType.PinSubCategory, PinType.PinSubCategoryObject.Get(), PinType.ContainerType, PinType.PinValueType);
-			bIsErrorFree &= TempVarOutput->GetVariablePin() && CompilerContext.MovePinLinksToIntermediate(*CurrentPin, *TempVarOutput->GetVariablePin()).CanSafeConnect();
-			VariableOutputs.Add(FBaseAsyncTaskHelper::FOutputPinAndLocalVariable(CurrentPin, TempVarOutput));
+			if (!bPassedFactoryOutputs)
+			{
+				UEdGraphPin* DestPin = CallCreateProxyObjectNode->FindPin(CurrentPin->PinName);
+				bIsErrorFree &= DestPin && CompilerContext.MovePinLinksToIntermediate(*CurrentPin, *DestPin).CanSafeConnect();
+			}
+			else
+			{
+				const FEdGraphPinType& PinType = CurrentPin->PinType;
+				UK2Node_TemporaryVariable* TempVarOutput = CompilerContext.SpawnInternalVariable(
+					this, PinType.PinCategory, PinType.PinSubCategory, PinType.PinSubCategoryObject.Get(), PinType.ContainerType, PinType.PinValueType);
+				bIsErrorFree &= TempVarOutput->GetVariablePin() && CompilerContext.MovePinLinksToIntermediate(*CurrentPin, *TempVarOutput->GetVariablePin()).CanSafeConnect();
+				VariableOutputs.Add(FBaseAsyncTaskHelper::FOutputPinAndLocalVariable(CurrentPin, TempVarOutput));
+			}
+		}
+		else if (!bPassedFactoryOutputs && CurrentPin && CurrentPin->Direction == EGPD_Output)
+		{
+			// the first exec that isn't the node's then pin is the start of the asyc delegate pins
+			// once we hit this point, we've iterated beyond all outputs for the factory function
+			bPassedFactoryOutputs = (CurrentPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) && (CurrentPin->PinName != UEdGraphSchema_K2::PN_Then);
 		}
 	}
 
 	// FOR EACH DELEGATE DEFINE EVENT, CONNECT IT TO DELEGATE AND IMPLEMENT A CHAIN OF ASSIGMENTS
-	UEdGraphPin* LastThenPin = CallCreateProxyObjectNode->FindPinChecked(Schema->PN_Then);
+	UEdGraphPin* LastThenPin = CallCreateProxyObjectNode->FindPinChecked(UEdGraphSchema_K2::PN_Then);
 
 	UK2Node_CallFunction* IsValidFuncNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
 	const FName IsValidFuncName = GET_FUNCTION_NAME_CHECKED(UKismetSystemLibrary, IsValid);
@@ -325,109 +296,124 @@ void UK2Node_State::ExpandNode(FKismetCompilerContext& CompilerContext, UEdGraph
 	bIsErrorFree &= Schema->TryCreateConnection(LastThenPin, ValidateProxyNode->GetExecPin());
 	LastThenPin = ValidateProxyNode->GetThenPin();
 
-	UK2Node_DynamicCast* UpCastNode = CompilerContext.SpawnIntermediateNode<UK2Node_DynamicCast>(this, SourceGraph);
-	UpCastNode->TargetType = ProxyClass;
-	UpCastNode->AllocateDefaultPins();
-	bIsErrorFree &= Schema->TryCreateConnection(ProxyObjectPin, UpCastNode->GetCastSourcePin());
-	ProxyObjectPin = UpCastNode->GetCastResultPin();
-
-	bIsErrorFree &= Schema->TryCreateConnection(LastThenPin, UpCastNode->GetExecPin());
-	LastThenPin = UpCastNode->GetValidCastPin();
-
-	// Create 'set var by name' nodes and hook them up
-	for (int32 PinIdx = 0; PinIdx < Pins.Num(); PinIdx++)
-	{
-		// Only create 'set param by name' node if this pin is linked to something
-		UEdGraphPin* SpawnVarPin = Pins[PinIdx];
-		if (SpawnVarPin->LinkedTo.Num() > 0)
-		{
-			UFunction* SetByNameFunction = Schema->FindSetVariableByNameFunction(SpawnVarPin->PinType);
-			if (SetByNameFunction)
-			{
-				UK2Node_CallFunction* SetVarNode = NULL;
-				if (SpawnVarPin->PinType.IsArray())
-				{
-					SetVarNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallArrayFunction>(this, SourceGraph);
-				}
-				else
-				{
-					SetVarNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
-				}
-				SetVarNode->SetFromFunction(SetByNameFunction);
-				SetVarNode->AllocateDefaultPins();
-
-				// Connect this node into the exec chain
-				bIsErrorFree &= Schema->TryCreateConnection(LastThenPin, SetVarNode->GetExecPin());
-
-				// Connect the new actor to the 'object' pin
-				bIsErrorFree &= Schema->TryCreateConnection(ProxyObjectPin, SetVarNode->FindPinChecked(ObjectParamName));
-
-				// Fill in literal for 'property name' pin - name of pin is property name
-				UEdGraphPin* PropertyNamePin = SetVarNode->FindPinChecked(PropertyNameParamName);
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION >= 19
-				PropertyNamePin->DefaultValue = SpawnVarPin->PinName.ToString();
-#else
-				PropertyNamePin->DefaultValue = SpawnVarPin->PinName;
-#endif
-
-				// Move connection from the variable pin on the spawn node to the 'value' pin
-				UEdGraphPin* ValuePin = SetVarNode->FindPinChecked(ValueParamName);
-				CompilerContext.MovePinLinksToIntermediate(*SpawnVarPin, *ValuePin);
-				if (SpawnVarPin->PinType.IsArray())
-				{
-					SetVarNode->PinConnectionListChanged(ValuePin);
-				}
-
-				// Update 'last node in sequence' var
-				LastThenPin = SetVarNode->GetThenPin();
-			}
-		}
-	}
-
+#pragma region OUR_CODE
+	ExpandNode_StateCode(CompilerContext, SourceGraph, Schema, bIsErrorFree, ProxyObjectPin, LastThenPin);
+	
+	// Original line below:
+	//for (TFieldIterator<UMulticastDelegateProperty> PropertyIt(ProxyClass); PropertyIt && bIsErrorFree; ++PropertyIt)
 	for (TFieldIterator<UMulticastDelegateProperty> PropertyIt(ProxyClass, EFieldIteratorFlags::IncludeSuper); PropertyIt && bIsErrorFree; ++PropertyIt)
+#pragma endregion //OUR_CODE
 	{
 		bIsErrorFree &= FBaseAsyncTaskHelper::HandleDelegateImplementation(*PropertyIt, VariableOutputs, ProxyObjectPin, LastThenPin, this, SourceGraph, CompilerContext);
 	}
-
-	if (CallCreateProxyObjectNode->FindPinChecked(Schema->PN_Then) == LastThenPin)
+	
+	if (CallCreateProxyObjectNode->FindPinChecked(UEdGraphSchema_K2::PN_Then) == LastThenPin)
 	{
 		CompilerContext.MessageLog.Error(*LOCTEXT("MissingDelegateProperties", "BaseAsyncTask: Proxy has no delegates defined. @@").ToString(), this);
 		return;
 	}
-
+	
 	// Create a call to activate the proxy object if necessary
 	if (ProxyActivateFunctionName != NAME_None)
 	{
 		UK2Node_CallFunction* const CallActivateProxyObjectNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
 		CallActivateProxyObjectNode->FunctionReference.SetExternalMember(ProxyActivateFunctionName, ProxyClass);
 		CallActivateProxyObjectNode->AllocateDefaultPins();
-
+	
 		// Hook up the self connection
 		UEdGraphPin* ActivateCallSelfPin = Schema->FindSelfPin(*CallActivateProxyObjectNode, EGPD_Input);
 		check(ActivateCallSelfPin);
-
+	
 		bIsErrorFree &= Schema->TryCreateConnection(ProxyObjectPin, ActivateCallSelfPin);
-
+	
 		// Hook the activate node up in the exec chain
-		UEdGraphPin* ActivateExecPin = CallActivateProxyObjectNode->FindPinChecked(Schema->PN_Execute);
-		UEdGraphPin* ActivateThenPin = CallActivateProxyObjectNode->FindPinChecked(Schema->PN_Then);
-
+		UEdGraphPin* ActivateExecPin = CallActivateProxyObjectNode->FindPinChecked(UEdGraphSchema_K2::PN_Execute);
+		UEdGraphPin* ActivateThenPin = CallActivateProxyObjectNode->FindPinChecked(UEdGraphSchema_K2::PN_Then);
+	
 		bIsErrorFree &= Schema->TryCreateConnection(LastThenPin, ActivateExecPin);
-
+	
 		LastThenPin = ActivateThenPin;
 	}
-
+	
 	// Move the connections from the original node then pin to the last internal then pin
-	bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPinChecked(Schema->PN_Then), *LastThenPin).CanSafeConnect();
+	
+	UEdGraphPin* OriginalThenPin = FindPin(UEdGraphSchema_K2::PN_Then);
+	
+	if (OriginalThenPin)
+	{
+		bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*OriginalThenPin, *LastThenPin).CanSafeConnect();
+	}
 	bIsErrorFree &= CompilerContext.CopyPinLinksToIntermediate(*LastThenPin, *ValidateProxyNode->GetElsePin()).CanSafeConnect();
-
+	
 	if (!bIsErrorFree)
 	{
 		CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionError", "BaseAsyncTask: Internal connection error. @@").ToString(), this);
 	}
-
+	
 	// Make sure we caught everything
 	BreakAllNodeLinks();
+}
+
+void UK2Node_State::ExpandNode_StateCode(class FKismetCompilerContext& CompilerContext, UEdGraph* SourceGraph, const UEdGraphSchema_K2* Schema, bool& bIsErrorFree, UEdGraphPin*& ProxyObjectPin, UEdGraphPin*& LastThenPin)
+{
+	// Cast our UState ProxyClass to our actual state class.
+	UK2Node_DynamicCast* DynamicCastNode = CompilerContext.SpawnIntermediateNode<UK2Node_DynamicCast>(this, SourceGraph);
+	DynamicCastNode->TargetType = ProxyClass;
+	DynamicCastNode->AllocateDefaultPins();
+	bIsErrorFree &= Schema->TryCreateConnection(ProxyObjectPin, DynamicCastNode->GetCastSourcePin());
+	ProxyObjectPin = DynamicCastNode->GetCastResultPin();
+
+	bIsErrorFree &= Schema->TryCreateConnection(LastThenPin, DynamicCastNode->GetExecPin());
+	LastThenPin = DynamicCastNode->GetValidCastPin();
+
+	// Since we cannot set variables via the factory function, we instead set them by name here
+	for (int32 PinIdx = 0; PinIdx < Pins.Num(); PinIdx++)
+	{
+		UEdGraphPin* SpawnVarPin = Pins[PinIdx];
+		if (!SpawnVarPin)
+		{
+			continue;
+		}
+
+		UFunction* SetByNameFunction = Schema->FindSetVariableByNameFunction(SpawnVarPin->PinType);
+		if (!SetByNameFunction)
+		{
+			continue;
+		}
+
+		UK2Node_CallFunction* SetVarNode = nullptr;
+		if (SpawnVarPin->PinType.IsArray())
+		{
+			SetVarNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallArrayFunction>(this, SourceGraph);
+		}
+		else
+		{
+			SetVarNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
+		}
+		SetVarNode->SetFromFunction(SetByNameFunction);
+		SetVarNode->AllocateDefaultPins();
+
+		// Connect this node into the exec chain
+		bIsErrorFree &= Schema->TryCreateConnection(LastThenPin, SetVarNode->GetExecPin());
+
+		// Connect the new actor to the 'object' pin
+		bIsErrorFree &= Schema->TryCreateConnection(ProxyObjectPin, SetVarNode->FindPinChecked(FString(TEXT("Object"))));
+
+		// Fill in literal for 'property name' pin - name of pin is property name
+		UEdGraphPin* PropertyNamePin = SetVarNode->FindPinChecked(FString(TEXT("PropertyName")));
+		PropertyNamePin->DefaultValue = SpawnVarPin->PinName.ToString();
+
+		// Move connection from the variable pin on the spawn node to the 'value' pin
+		UEdGraphPin* ValuePin = SetVarNode->FindPinChecked(FString(TEXT("Value")));
+		CompilerContext.MovePinLinksToIntermediate(*SpawnVarPin, *ValuePin);
+		if (SpawnVarPin->PinType.IsArray())
+		{
+			SetVarNode->PinConnectionListChanged(ValuePin);
+		}
+
+		// Update 'last node in sequence' var
+		LastThenPin = SetVarNode->GetThenPin();
+	}
 }
 
 #if WITH_EDITOR

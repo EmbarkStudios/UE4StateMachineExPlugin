@@ -1,11 +1,7 @@
-#include "StateMachineExPrivatePCH.h"
-
-#include "StateMachine/State.h"
-#include "StateMachine/StateMachine.h"
+#include "State.h"
+#include "StateMachine.h"
 
 #include "Kismet/GameplayStatics.h"
-
-
 
 UState::UState(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -15,20 +11,6 @@ UState::UState(const FObjectInitializer& ObjectInitializer)
 UWorld* UState::GetWorld() const
 {
 	return (!HasAnyFlags(RF_ClassDefaultObject) && GetOuter()) ? GetOuter()->GetWorld() : nullptr;
-}
-
-APlayerController* UState::GetOwningPlayer() const
-{
-	return UGameplayStatics::GetPlayerController(this, 0);
-}
-
-APawn* UState::GetOwningPlayerPawn() const
-{
-	const APlayerController* PlayerController = GetOwningPlayer();
-
-	return IsValid(PlayerController)
-		? PlayerController->GetPawnOrSpectator()
-		: nullptr;
 }
 
 void UState::Enter_Implementation()

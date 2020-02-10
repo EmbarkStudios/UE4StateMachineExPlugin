@@ -1,8 +1,7 @@
 #pragma once
 
-#include "ModuleManager.h"
-
-
+#include "CoreMinimal.h"
+#include "Runtime/Core/Public/Modules/ModuleManager.h"
 
 class FStateMachineDeveloperExModule : public IModuleInterface
 {
@@ -13,11 +12,4 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
-};
-
-
-
-struct FStateMachineDeveloperEx
-{
-	// Declare module static functions here
 };

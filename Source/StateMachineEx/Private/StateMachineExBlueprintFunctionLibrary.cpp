@@ -1,10 +1,7 @@
-#include "StateMachineExPrivatePCH.h"
-#include "StateMachineExStatics.h"
+#include "StateMachineExBlueprintFunctionLibrary.h"
 
-#include "StateMachine/StateMachine.h"
-#include "StateMachine/State.h"
-
-
+#include "StateMachine.h"
+#include "State.h"
 
 UStateMachine* UStateMachineExStatics::GuessStateMachine(UObject* WorldContextObject)
 {
@@ -12,7 +9,7 @@ UStateMachine* UStateMachineExStatics::GuessStateMachine(UObject* WorldContextOb
 	if (IsValid(StateMachine))
 		return StateMachine;
 
-	for (UObjectProperty* ObjecProperty : TFieldRange<UObjectProperty>(WorldContextObject->GetClass()))
+	for (UObjectProperty* ObjecProperty : TFieldRange<UObjectProperty>(WorldContextObject->GetClass(), EFieldIteratorFlags::IncludeSuper))
 	{
 		if (ObjecProperty->PropertyClass == UStateMachine::StaticClass()
 			|| ObjecProperty->PropertyClass->IsChildOf(UStateMachine::StaticClass()))

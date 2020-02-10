@@ -1,9 +1,6 @@
-#include "StateMachineExPrivatePCH.h"
-#include "StateMachine/StateMachine.h"
-
-#include "StateMachine/State.h"
-
-
+#include "StateMachine.h"
+#include "StateMachineExModule.h"
+#include "State.h"
 
 UStateMachine::UStateMachine(const FObjectInitializer &Initializer)
 	: Super(Initializer)
@@ -94,7 +91,7 @@ void UStateMachine::Shutdown_Implementation()
 		if (IsValid(ShutdownState))
 		{
 			SwitchState(ShutdownState);
-			Tick(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0);
+			Tick(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.0f);
 		}
 		if (IsValid(CurrentState))
 		{

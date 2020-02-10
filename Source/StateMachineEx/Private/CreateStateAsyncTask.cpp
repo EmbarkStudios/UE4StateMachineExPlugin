@@ -1,11 +1,8 @@
-#include "StateMachineExPrivatePCH.h"
-#include "Blueprint/CreateStateAsyncTask.h"
+#include "CreateStateAsyncTask.h"
 
-#include "StateMachine/StateMachine.h"
-#include "StateMachine/State.h"
-#include "StateMachineExStatics.h"
-
-
+#include "StateMachine.h"
+#include "State.h"
+#include "StateMachineExBlueprintFunctionLibrary.h"
 
 UCreateStateAsyncTask::UCreateStateAsyncTask(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -23,4 +20,3 @@ UState* UCreateStateAsyncTask::CreateStateObject(UObject* WorldContextObject, UC
 
 	return StateMachine->SwitchState(StateClass);
 }
-
