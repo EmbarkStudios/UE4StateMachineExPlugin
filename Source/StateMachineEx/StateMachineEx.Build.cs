@@ -5,10 +5,10 @@ public class StateMachineEx : ModuleRules
 {
 	public StateMachineEx(ReadOnlyTargetRules Target)
 		: base(Target)
-    {
-        PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+	{
+		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PublicIncludePaths.AddRange(new string[] 
+		PublicIncludePaths.AddRange(new string[] 
 		{
 			Path.Combine(ModuleDirectory, "Public"),
 		});

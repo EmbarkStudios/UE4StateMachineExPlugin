@@ -21,7 +21,7 @@
 		},
 		{
 			"Name": "StateMachineDeveloperEx",
-			"Type": "Developer",
+			"Type": "UncookedOnly",
 			"LoadingPhase": "Default"
 		}
 	]

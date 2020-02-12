@@ -15,13 +15,20 @@ public class StateMachineDeveloperEx : ModuleRules
 		
 		PublicDependencyModuleNames.AddRange(new string[] 
 		{
-			"BlueprintGraph",
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"UnrealEd",
-            "KismetCompiler",
             "StateMachineEx",
         });
-	}
+
+        if (Target.bBuildEditor)
+        {
+            PublicDependencyModuleNames.AddRange(new string[]
+            {
+				"BlueprintGraph",
+                "UnrealEd",
+				"KismetCompiler",
+            });
+        }
+    }
 }
